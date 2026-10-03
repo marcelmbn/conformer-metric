@@ -1,11 +1,12 @@
-"""Optional adapters; importing this module does not load a chemistry backend."""
+"""Molecular RMSD calculation through the required upstream iRMSD package."""
 
 from typing import Literal
 
 import numpy as np
+from irmsd import get_irmsd
 from numpy.typing import ArrayLike, NDArray
 
-from . import pairwise_distances
+from ._pairwise import callback_distances
 
 __all__ = ["irmsd_distances"]
 
@@ -16,7 +17,7 @@ def irmsd_distances(
     *,
     inversion: Literal["auto", "on", "off"] = "off",
 ) -> NDArray[np.float64]:
-    """Pairwise iRMSD in Å via pprcht/irmsd's get_irmsd (optional extra).
+    """Pairwise iRMSD in Å via pprcht/irmsd's get_irmsd.
 
     Coordinates have shape (N_conformers, N_atoms, 3), in Å. Atomic numbers
     have shape (N_atoms,) for shared atom order, or (N_conformers, N_atoms)
@@ -44,13 +45,9 @@ def irmsd_distances(
     if n and np.any(np.sort(z, axis=1) != np.sort(z[0])):
         raise ValueError("all conformers must have the same elemental composition")
     z = np.array(z, dtype=np.int32, copy=True)
-    try:
-        from irmsd import get_irmsd
-    except ImportError as exc:
-        raise ImportError("Install the backend with: uv sync --extra irmsd") from exc
     flag = {"auto": 0, "on": 1, "off": 2}[inversion]
 
     def distance(i: int, j: int) -> float:
         return float(get_irmsd(z[i], xyz[i], z[j], xyz[j], iinversion=flag)[0])
 
-    return pairwise_distances(range(n), distance)
+    return callback_distances(range(n), distance)

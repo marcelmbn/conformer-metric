@@ -124,7 +124,9 @@ weighted diversity, rarefaction/subsampling, N_unique, curves/AUC, tests, and a
 concise README. A pluggable distance callable was chosen to support Pracht-style
 iRMSD without inventing an uncertain reimplementation of that algorithm.
 
-The working directory already implements the core scope with NumPy, a callable
-distance interface, and an optional upstream iRMSD adapter. Energy-window helpers,
+The current package implements the core scope with NumPy and required upstream
+iRMSD. Coordinate distances use iRMSD by default, while explicit callbacks support
+alternative metrics. iRMSD was originally optional and became a required dependency
+in a subsequent repository update. Energy-window helpers,
 effective population count, a built-in TFD adapter, and search-budget collection
 were discussed as context; this document does not make them new requirements.

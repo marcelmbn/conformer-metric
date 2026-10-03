@@ -1,15 +1,20 @@
-"""Distance-agnostic conformer diversity. Distances keep their input units."""
+"""Conformer diversity with iRMSD by default. Distances keep their input units."""
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from operator import index
+from typing import Literal
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from ._pairwise import callback_distances
+from .backends import irmsd_distances
+
 __all__ = [
     "validate_distances",
     "pairwise_distances",
+    "irmsd_distances",
     "mean_pairwise",
     "rao_diversity",
     "cluster_labels",
@@ -45,25 +50,32 @@ def validate_distances(distances: ArrayLike) -> NDArray[np.float64]:
 
 
 def pairwise_distances[T](
-    conformers: Iterable[T], distance: Callable[[T, T], float]
+    conformers: Iterable[T],
+    distance: Callable[[T, T], float] | None = None,
+    *,
+    atomic_numbers: ArrayLike | None = None,
+    inversion: Literal["auto", "on", "off"] = "off",
 ) -> NDArray[np.float64]:
-    """Evaluate a symmetric distance once per i < j; diagonal is zero.
+    """Build a symmetric distance matrix, using upstream iRMSD by default.
 
-    Conformers can be coordinate arrays or arbitrary objects. The caller's
-    distance must be symmetric and return a finite, nonnegative real scalar.
+    By default, conformers are (atoms, 3) coordinate arrays in Å and
+    atomic_numbers is required. Inversion is off to keep enantiomers distinct.
+    Alternatively, supply an explicit symmetric distance callback for arbitrary
+    objects; it must return a finite, nonnegative real scalar. Each unordered
+    pair is evaluated once and mirrored; the diagonal is zero.
     """
-    items = list(conformers)
-    d = np.zeros((len(items), len(items)), dtype=float)
-    for i in range(len(items)):
-        for j in range(i + 1, len(items)):
-            value = np.asarray(distance(items[i], items[j]))
-            if value.ndim != 0 or np.iscomplexobj(value):
-                raise ValueError("distance must return a real scalar")
-            value = float(value)
-            if not np.isfinite(value) or value < 0:
-                raise ValueError("distance must return a finite nonnegative value")
-            d[i, j] = d[j, i] = value
-    return d
+    if distance is None:
+        if atomic_numbers is None:
+            raise ValueError("atomic_numbers is required for the default iRMSD distance")
+        coordinates = np.asarray(
+            conformers if isinstance(conformers, np.ndarray) else list(conformers)
+        )
+        return irmsd_distances(atomic_numbers, coordinates, inversion=inversion)
+    if atomic_numbers is not None or inversion != "off":
+        raise ValueError(
+            "atomic_numbers and inversion apply only to the default iRMSD distance"
+        )
+    return callback_distances(conformers, distance)
 
 
 def mean_pairwise(distances: ArrayLike) -> float:

@@ -1,8 +1,8 @@
 # conformer-metric
 
-A lean, typed Python library for **ensemble diversity**, with NumPy as its only
-required runtime dependency and optional upstream iRMSD. Python 3.12+, `uv`,
-Hatchling, pytest, Ruff, and ty.
+A lean, typed Python library for **ensemble diversity**, with NumPy and upstream
+iRMSD as required runtime dependencies. Molecular distances use iRMSD by default.
+Python 3.12+, `uv`, Hatchling, pytest, Ruff, and ty.
 
 ## Scientific definitions
 
@@ -53,6 +53,21 @@ uv sync --locked
 uv run python examples/basic.py
 ```
 
+Calculate molecular distances directly from coordinates; no backend extra or
+distance callback is needed:
+
+```python
+import numpy as np
+from conformer_metric import mean_pairwise, pairwise_distances
+
+water = np.array([[0, 0, 0], [0.9572, 0, 0], [-0.239987, 0.927297, 0]])
+D = pairwise_distances([water, water + [3, 2, 1]], atomic_numbers=[8, 1, 1])
+assert mean_pairwise(D) < 1e-7
+```
+
+All diversity and coverage functions consume the resulting distance matrix.
+They also accept precomputed distances:
+
 ```python
 import numpy as np
 from conformer_metric import (
@@ -86,13 +101,11 @@ coverage_by_size = rarefaction(
 print(coverage_by_size.mean)
 ```
 
-For coordinates or molecule objects, supply a distance callable:
+To use another metric, supply an explicit distance callable:
 
 ```python
 from conformer_metric import pairwise_distances
 
-# coords: iterable of (atoms, 3) arrays; external_irmsd: your tested backend.
-# D = pairwise_distances(coords, distance=external_irmsd)
 # D = pairwise_distances(molecule_objects, distance=external_tfd)
 
 # Runnable toy example with vector Euclidean distance (not molecular RMSD):
@@ -104,19 +117,21 @@ assert mean_pairwise(D) == 5.0
 ```
 
 The callback is evaluated once per unordered pair and mirrored. It must be
-symmetric, pure, and return a finite nonnegative scalar. Atom correspondence,
-alignment, symmetry/permutation handling, stereochemistry, hydrogen selection,
-and units belong to the external backend. No reimplementation of the Pracht
-algorithm is bundled.
+symmetric, pure, and return a finite nonnegative scalar. A custom callback is
+responsible for alignment, atom correspondence, symmetry/permutation handling,
+and units. `atomic_numbers` and non-default `inversion` cannot be combined with
+a custom callback. All built-in RMSD calculation uses upstream iRMSD; no
+reimplementation of the Pracht algorithm is bundled.
 
 ## Upstream iRMSD
 
-The optional adapter uses [pprcht/irmsd](https://github.com/pprcht/irmsd), via its
+The built-in adapter uses [pprcht/irmsd](https://github.com/pprcht/irmsd), via its
 [coordinate API](https://pprcht.github.io/irmsd/generated/irmsd.html#irmsd.get_irmsd).
-Install it with `uv sync --locked --extra irmsd`, then:
+It is installed by `uv sync --locked` or `pip install conformer-metric`.
+The explicit iRMSD helper is also available at the package's top level:
 
 ```python
-from conformer_metric.backends import irmsd_distances
+from conformer_metric import irmsd_distances
 
 water = np.array([[0, 0, 0], [0.9572, 0, 0], [-0.239987, 0.927297, 0]])
 D = irmsd_distances([8, 1, 1], [water, water + [3, 2, 1]])
@@ -125,18 +140,20 @@ assert mean_pairwise(D) < 1e-7
 
 Coordinates have shape `(conformers, atoms, 3)` in Å. Atomic numbers can be a
 shared `(atoms,)` vector or a `(conformers, atoms)` array for different atom
-orders. All conformers must describe the same molecule; equal formulas alone
+orders. These inputs apply to both `pairwise_distances` and `irmsd_distances`.
+All conformers must describe the same molecule; equal formulas alone
 do not establish equal connectivity. Select any heavy atoms before calling.
 `inversion="off"` is the default; `"auto"`/`"on"` forward upstream flags 0/1.
 Backend 0.1.2 passes rotation, translation, permutation, and geometry-change
 checks here, but a forced-inversion check with all unique canonical ranks fails
 upstream. That case is recorded as a strict expected failure, not corrected by
-the adapter. Integration tests require the extra; no-backend core tests also run.
+the adapter. Integration tests run as part of the standard test suite and fail
+if the required backend is missing.
 
 For `irmsd.Molecule` objects, use `pairwise_distances(molecules,
 lambda a, b: float(irmsd.get_irmsd_molecule(a, b, iinversion=2)[0]))`.
 The upstream backend has its own LGPL license and native-library requirements.
-Run `uv run --extra irmsd python examples/with_irmsd.py` for a complete example.
+Run `uv run python examples/with_irmsd.py` for a complete example.
 
 ## Interpretation and API boundaries
 
@@ -172,7 +189,7 @@ Run `uv run --extra irmsd python examples/with_irmsd.py` for a complete example.
 ## Development
 
 ```sh
-uv sync --locked --all-extras
+uv sync --locked
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .

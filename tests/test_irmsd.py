@@ -2,9 +2,10 @@
 
 import numpy as np
 import pytest
+from irmsd import get_irmsd
 from numpy.testing import assert_allclose, assert_array_equal
 
-from conformer_metric.backends import irmsd_distances
+from conformer_metric import irmsd_distances, pairwise_distances
 
 
 @pytest.fixture
@@ -13,7 +14,6 @@ def water():
 
 
 def test_real_backend_rotation_translation_and_permutation(water):
-    pytest.importorskip("irmsd")
     rotation = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
     moved = (water @ rotation + [3, -2, 4])[[2, 0, 1]]
     coords = np.array([water, moved])
@@ -26,13 +26,12 @@ def test_real_backend_rotation_translation_and_permutation(water):
 
 
 def test_real_backend_nonidentical_conformers(water):
-    backend = pytest.importorskip("irmsd")
     stretched = water.copy()
     stretched[1] *= 1.2
     coords = np.array([water, stretched])
     z = np.array([8, 1, 1])
     result = irmsd_distances(z, coords)
-    direct = backend.get_irmsd(z, water, z, stretched, iinversion=2)[0]
+    direct = get_irmsd(z, water, z, stretched, iinversion=2)[0]
     assert result[0, 1] > 0.01
     assert result[0, 1] == pytest.approx(direct)
     assert_array_equal(result, result.T)
@@ -40,7 +39,6 @@ def test_real_backend_nonidentical_conformers(water):
 
 
 def test_real_backend_inversion_is_explicit():
-    backend = pytest.importorskip("irmsd")
     xyz = np.array(
         [[0, 0, 0], [0.6, 0.6, 0.6], [0.8, -0.8, -0.8], [-1, 1, -1], [-1.1, -1.1, 1.1]]
     )
@@ -50,10 +48,11 @@ def test_real_backend_inversion_is_explicit():
     assert irmsd_distances(z, coords, inversion="off")[0, 1] > 0.1
     # The adapter forwards policy rather than correcting the upstream algorithm.
     for policy, flag in (("auto", 0), ("on", 1), ("off", 2)):
-        expected = backend.get_irmsd(np.array(z), xyz, np.array(z), reflected, iinversion=flag)[
-            0
-        ]
+        expected = get_irmsd(np.array(z), xyz, np.array(z), reflected, iinversion=flag)[0]
         assert irmsd_distances(z, coords, inversion=policy)[0, 1] == pytest.approx(expected)
+        assert pairwise_distances(coords, atomic_numbers=z, inversion=policy)[
+            0, 1
+        ] == pytest.approx(expected)
 
 
 @pytest.mark.xfail(
@@ -61,7 +60,6 @@ def test_real_backend_inversion_is_explicit():
     reason="Upstream irmsd 0.1.2 fails forced inversion when every canonical rank is unique",
 )
 def test_upstream_forced_inversion_all_unique_ranks():
-    pytest.importorskip("irmsd")
     xyz = np.array(
         [[0, 0, 0], [0.6, 0.6, 0.6], [0.8, -0.8, -0.8], [-1, 1, -1], [-1.1, -1.1, 1.1]]
     )
@@ -95,9 +93,39 @@ def test_invalid_inversion(water):
         irmsd_distances([8, 1, 1], np.array([water]), inversion="invalid")
 
 
-def test_missing_backend_has_actionable_error(monkeypatch, water):
-    import sys
+def test_default_distance_aligns_rotation_translation_and_atom_permutation(water):
+    rotation = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    moved = (water @ rotation + [3, -2, 4])[[2, 0, 1]]
+    coords = np.array([water, moved])
+    numbers = np.array([[8, 1, 1], [1, 8, 1]])
+    original = coords.copy()
+    result = pairwise_distances(iter(coords), atomic_numbers=numbers)
+    assert_allclose(result, np.zeros((2, 2)), atol=1e-7)
+    assert_array_equal(coords, original)
+    assert_array_equal(numbers, [[8, 1, 1], [1, 8, 1]])
 
-    monkeypatch.setitem(sys.modules, "irmsd", None)
-    with pytest.raises(ImportError, match="uv sync --extra irmsd"):
-        irmsd_distances([8, 1, 1], np.array([water, water]))
+
+def test_default_distance_detects_geometry_changes(water):
+    stretched = water.copy()
+    stretched[1] *= 1.2
+    result = pairwise_distances([water, stretched], atomic_numbers=[8, 1, 1])
+    assert result[0, 1] > 0.01
+    z = np.array([8, 1, 1])
+    assert result[0, 1] == pytest.approx(get_irmsd(z, water, z, stretched, iinversion=2)[0])
+
+
+def test_default_distance_empty_and_singleton(water):
+    empty = pairwise_distances(np.empty((0, 3, 3)), atomic_numbers=[8, 1, 1])
+    assert empty.shape == (0, 0)
+    assert_array_equal(pairwise_distances([water], atomic_numbers=[8, 1, 1]), [[0]])
+
+
+def test_default_distance_requires_atomic_numbers(water):
+    with pytest.raises(ValueError, match="atomic_numbers is required"):
+        pairwise_distances([water, water])
+
+
+@pytest.mark.parametrize("options", [{"atomic_numbers": [8, 1, 1]}, {"inversion": "on"}])
+def test_custom_distance_rejects_ignored_molecular_options(water, options):
+    with pytest.raises(ValueError, match="apply only to the default iRMSD"):
+        pairwise_distances([water, water], lambda a, b: 0.0, **options)

@@ -16,12 +16,8 @@ name = "conformer-metric"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "numpy" },
-]
-
-[package.optional-dependencies]
-irmsd = [
     { name = "irmsd" },
+    { name = "numpy" },
 ]
 
 [package.dev-dependencies]
@@ -33,10 +29,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "irmsd", marker = "extra == 'irmsd'", specifier = ">=0.1.2,<0.2" },
+    { name = "irmsd", specifier = ">=0.1.2,<0.2" },
     { name = "numpy", specifier = ">=2.0" },
 ]
-provides-extras = ["irmsd"]
 
 [package.metadata.requires-dev]
 dev = [

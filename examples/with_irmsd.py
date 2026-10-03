@@ -1,9 +1,8 @@
-"""Run with: uv run --extra irmsd python examples/with_irmsd.py."""
+"""Run with: uv run python examples/with_irmsd.py."""
 
 import numpy as np
 
-from conformer_metric import mean_pairwise, unique_curve
-from conformer_metric.backends import irmsd_distances
+from conformer_metric import irmsd_distances, mean_pairwise, unique_curve
 
 water = np.array([[0, 0, 0], [0.9572, 0, 0], [-0.239987, 0.927297, 0]])
 stretched = water.copy()
