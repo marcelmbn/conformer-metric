@@ -41,6 +41,9 @@ externally supplied TFD as a normalized alternative and iRMSD as a complementary
 score. Neither subsampling nor division by N removes molecular size/flexibility
 effects. Raw cluster counts should not rank different molecules.
 
+The originating discussion and its design rationale are summarized in
+[Project context](docs/context.md).
+
 ## Setup and usage
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
